@@ -42,19 +42,17 @@ export default function Chat() {
   useEffect(() => {
     const fetchContacts = async () => {
       if (!currentUser) return;
-
       if (!currentUser.isAvatarImageSet) {
         navigate("/setAvatar");
         return;
       }
-
       const { data } = await axios.get(`${allUsersRoute}/${currentUser._id}`);
       setContacts(data);
     };
     fetchContacts();
   }, [currentUser, navigate]);
 
-  /** 🔔 Incoming / outgoing call events */
+  /** 🔥 CALL SOCKET EVENTS */
   useEffect(() => {
     if (!socket.current) return;
 
@@ -63,71 +61,67 @@ export default function Chat() {
     socket.current.off("call-accepted");
     socket.current.off("end-call");
 
-    // 📥 Receiver gets a call
-    socket.current.on("incoming-call", (data) => {
-      setIncomingCall(data.from);
-      setCallRemoteUser(data.from);
+    /** 📥 Receiver gets a call */
+    socket.current.on("incoming-call", ({ from }) => {
+      setIncomingCall(from);
+      setCallRemoteUser(from);
     });
 
-    // ❌ Caller notified call was rejected
+    /** ❌ Caller notified call rejected */
     socket.current.on("call-rejected", () => {
       alert("❌ Call rejected");
       setIncomingCall(null);
       setOnCall(false);
+      setCallRemoteUser(null);
     });
 
-    // ✔ Caller notified call was accepted
-    socket.current.on("call-accepted", () => {
+    /** ✔ Caller notified call accepted */
+    socket.current.on("call-accepted", ({ from }) => {
       setIncomingCall(null);
       setOnCall(true);
+      setCallRemoteUser(from);
     });
 
-    // 🔴 Either user ends call
+    /** 🔴 Call ended by remote */
     socket.current.on("end-call", () => {
-      alert("🔴 Call Ended");
+      alert("🔴 Call ended");
       setOnCall(false);
+      setCallRemoteUser(null);
     });
   }, [currentUser]);
 
   /** 📞 Accept call */
   const acceptCall = () => {
-    socket.current.emit("call-accepted", {
-      to: incomingCall._id ?? incomingCall,
-    });
-    setIncomingCall(null);
+    incomingCall.isCaller = false;   // 🔥 receiver role
     setOnCall(true);
+    setCallRemoteUser(incomingCall);
+    socket.current.emit("call-accepted", { to: incomingCall._id, from: currentUser });
+    setIncomingCall(null);
   };
 
   /** ❌ Reject call */
   const rejectCall = () => {
-    socket.current.emit("call-rejected", {
-      to: incomingCall._id ?? incomingCall,
-    });
+    socket.current.emit("call-rejected", { to: incomingCall._id });
     setIncomingCall(null);
   };
 
-  /** 🔴 End call from UI */
+  /** 🔴 End call manually */
   const endAudioCall = () => {
     if (callRemoteUser) {
-      socket.current.emit("end-call", { to: callRemoteUser._id ?? callRemoteUser });
+      socket.current.emit("end-call", { to: callRemoteUser._id });
     }
     setOnCall(false);
+    setCallRemoteUser(null);
   };
 
-  /** When user clicks a contact to chat */
+  /** User selects chat */
   const handleChatChange = (chat) => {
     setCurrentChat(chat);
   };
 
-  /** 🔥 IMPORTANT: caller flag (so AudioCall knows who is caller) */
-  useEffect(() => {
-    if (!currentUser || !callRemoteUser) return;
-    currentUser.isCaller = true;
-  }, [callRemoteUser]);
-
   return (
     <>
-      {/* 🔔 Incoming call popup */}
+      {/* 🔔 incoming call popup */}
       {incomingCall && (
         <IncomingCall
           caller={incomingCall}
@@ -136,7 +130,7 @@ export default function Chat() {
         />
       )}
 
-      {/* 🔊 Active audio call window */}
+      {/* 🔊 audio call live screen */}
       {onCall && currentUser && callRemoteUser && (
         <AudioCall
           socket={socket}
@@ -150,7 +144,15 @@ export default function Chat() {
         <div className="inner">
           <Contacts contacts={contacts} changeChat={handleChatChange} />
           {currentChat ? (
-            <ChatContainer currentChat={currentChat} socket={socket} setCallRemoteUser={setCallRemoteUser} />
+            <ChatContainer
+              currentChat={currentChat}
+              socket={socket}
+              setCallRemoteUser={(user) => {
+                user.isCaller = true;       // 🔥 caller role
+                setCallRemoteUser(user);
+                setOnCall(true);
+              }}
+            />
           ) : (
             <Welcome />
           )}
@@ -160,6 +162,7 @@ export default function Chat() {
   );
 }
 
+/* 🎨 UI */
 const Container = styled.div`
   height: 100vh;
   width: 100vw;
