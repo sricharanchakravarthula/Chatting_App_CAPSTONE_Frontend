@@ -11,42 +11,53 @@ export default function AudioCall({ socket, currentUser, remoteUser, onEnd }) {
   const intervalRef = useRef();
 
   useEffect(() => {
-    /** 🔥 MOST IMPORTANT — receiver must not be caller */
-    if (!currentUser.isCaller) {
-      console.log("Receiver mode");
-    } else {
-      console.log("Caller mode");
-    }
-
     startTimer();
     initCall();
-
     return () => endCall(true);
     // eslint-disable-next-line
   }, []);
 
   /** ⏳ Call Duration */
   const startTimer = () => {
-    intervalRef.current = setInterval(() => setTimer(t => t + 1), 1000);
+    intervalRef.current = setInterval(() => setTimer((t) => t + 1), 1000);
   };
 
-  /** 🎧 WebRTC Setup */
+  /** 🎧 WebRTC Audio Setup */
   const initCall = async () => {
+    /** 📌 MUST ASK PERMISSION FIRST */
     const localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     localStreamRef.current = localStream;
 
+    /** 🌍 TURN + STUN servers (works in internet NAT cases) */
     const peer = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        {
+          urls: "turn:global.relay.metered.ca:443",
+          username: "bXVuYXNIRUFQ",
+          credential: "rTvhM5s7P7wju9ai"
+        }
+      ],
     });
+
+    localStream.getTracks().forEach((track) => peer.addTrack(track, localStream));
 
     peer.ontrack = (event) => {
       audioRef.current.srcObject = event.streams[0];
     };
 
-    localStream.getTracks().forEach(track => peer.addTrack(track, localStream));
+    peer.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.current.emit("ice-candidate", {
+          to: remoteUser._id,
+          candidate: event.candidate,
+        });
+      }
+    };
+
     peerRef.current = peer;
 
-    /** 🔴 Caller creates & sends offer */
+    /** 🎤 If caller → send offer */
     if (currentUser.isCaller) {
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
@@ -55,8 +66,7 @@ export default function AudioCall({ socket, currentUser, remoteUser, onEnd }) {
 
     /** 🔁 Receiver gets offer → sends answer */
     socket.current.on("receive-offer", async ({ offer }) => {
-      if (currentUser.isCaller) return; // Caller should ignore this event
-
+      if (currentUser.isCaller) return; // caller must ignore
       await peer.setRemoteDescription(offer);
       const answer = await peer.createAnswer();
       await peer.setLocalDescription(answer);
@@ -69,29 +79,19 @@ export default function AudioCall({ socket, currentUser, remoteUser, onEnd }) {
       await peer.setRemoteDescription(answer);
     });
 
-    /** ❄ ICE Candidates exchange */
+    /** ❄ ICE candidates exchange */
     socket.current.on("receive-ice-candidate", async ({ candidate }) => {
       if (candidate) await peer.addIceCandidate(candidate);
     });
 
-    /** ♻ Send ICE to the other peer */
-    peer.onicecandidate = (event) => {
-      if (event.candidate) {
-        socket.current.emit("ice-candidate", {
-          to: remoteUser._id,
-          candidate: event.candidate,
-        });
-      }
-    };
-
-    /** 🔴 Remote ended call */
+    /** 🔴 Call ended from remote */
     socket.current.on("end-call", () => endCall());
   };
 
-  /** 🔴 End Call */
+  /** 🛑 End Call Function */
   const endCall = (closing = false) => {
     clearInterval(intervalRef.current);
-    localStreamRef.current?.getTracks().forEach(t => t.stop());
+    localStreamRef.current?.getTracks().forEach((t) => t.stop());
     peerRef.current?.close();
 
     if (!closing) {
