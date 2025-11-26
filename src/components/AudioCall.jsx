@@ -17,35 +17,48 @@ export default function AudioCall({ socket, currentUser, remoteUser, onEnd }) {
     // eslint-disable-next-line
   }, []);
 
-  /** ⏳ Call Duration */
+  /** ⏱ Timer */
   const startTimer = () => {
     intervalRef.current = setInterval(() => setTimer((t) => t + 1), 1000);
   };
 
-  /** 🎧 WebRTC Audio Setup */
+  /** 🎧 WebRTC Setup */
   const initCall = async () => {
-    /** 📌 MUST ASK PERMISSION FIRST */
     const localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     localStreamRef.current = localStream;
 
-    /** 🌍 TURN + STUN servers (works in internet NAT cases) */
     const peer = new RTCPeerConnection({
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
         {
-          urls: "turn:global.relay.metered.ca:443",
-          username: "bXVuYXNIRUFQ",
-          credential: "rTvhM5s7P7wju9ai"
-        }
+          urls: "turn:openrelay.metered.ca:80",
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
+        {
+          urls: "turn:openrelay.metered.ca:443",
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
+        {
+          urls: "turn:openrelay.metered.ca:443?transport=tcp",
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
       ],
     });
 
+    peerRef.current = peer;
+
+    // Send our mic stream
     localStream.getTracks().forEach((track) => peer.addTrack(track, localStream));
 
+    // Play remote audio when received
     peer.ontrack = (event) => {
       audioRef.current.srcObject = event.streams[0];
     };
 
+    // Send ICE candidates to other peer
     peer.onicecandidate = (event) => {
       if (event.candidate) {
         socket.current.emit("ice-candidate", {
@@ -55,43 +68,42 @@ export default function AudioCall({ socket, currentUser, remoteUser, onEnd }) {
       }
     };
 
-    peerRef.current = peer;
-
-    /** 🎤 If caller → send offer */
+    /** CALLER → send offer */
     if (currentUser.isCaller) {
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
       socket.current.emit("send-offer", { to: remoteUser._id, offer });
     }
 
-    /** 🔁 Receiver gets offer → sends answer */
+    /** RECEIVER → get offer → send answer */
     socket.current.on("receive-offer", async ({ offer }) => {
-      if (currentUser.isCaller) return; // caller must ignore
+      if (currentUser.isCaller) return;
       await peer.setRemoteDescription(offer);
       const answer = await peer.createAnswer();
       await peer.setLocalDescription(answer);
       socket.current.emit("send-answer", { to: remoteUser._id, answer });
     });
 
-    /** 🔁 Caller receives answer */
+    /** CALLER → get answer */
     socket.current.on("receive-answer", async ({ answer }) => {
       if (!currentUser.isCaller) return;
       await peer.setRemoteDescription(answer);
     });
 
-    /** ❄ ICE candidates exchange */
+    /** ICE candidates exchange */
     socket.current.on("receive-ice-candidate", async ({ candidate }) => {
       if (candidate) await peer.addIceCandidate(candidate);
     });
 
-    /** 🔴 Call ended from remote */
+    /** End call */
     socket.current.on("end-call", () => endCall());
   };
 
-  /** 🛑 End Call Function */
+  /** 🔴 End Call */
   const endCall = (closing = false) => {
     clearInterval(intervalRef.current);
-    localStreamRef.current?.getTracks().forEach((t) => t.stop());
+
+    localStreamRef.current?.getTracks().forEach((track) => track.stop());
     peerRef.current?.close();
 
     if (!closing) {
@@ -123,7 +135,7 @@ export default function AudioCall({ socket, currentUser, remoteUser, onEnd }) {
   );
 }
 
-/* 🎨 UI Styling */
+/* 🎨 Styling */
 const Overlay = styled.div`
   position: fixed;
   inset: 0;
@@ -145,9 +157,6 @@ const CallBox = styled.div`
   color: white;
   box-shadow: 0 0 22px rgba(120, 98, 255, 0.26);
 
-  h2 {
-    margin-bottom: 4px;
-  }
   .user {
     font-size: 1.25rem;
     opacity: 0.92;
@@ -155,7 +164,6 @@ const CallBox = styled.div`
   .timer {
     margin-top: 10px;
     font-size: 1.45rem;
-    letter-spacing: 1px;
   }
   .end {
     margin-top: 26px;
