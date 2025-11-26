@@ -42,17 +42,19 @@ export default function Chat() {
   useEffect(() => {
     const fetchContacts = async () => {
       if (!currentUser) return;
+
       if (!currentUser.isAvatarImageSet) {
         navigate("/setAvatar");
         return;
       }
+
       const { data } = await axios.get(`${allUsersRoute}/${currentUser._id}`);
       setContacts(data);
     };
     fetchContacts();
   }, [currentUser, navigate]);
 
-  /** 🔥 CALL SOCKET EVENTS */
+  /** 🔔 Call events */
   useEffect(() => {
     if (!socket.current) return;
 
@@ -61,67 +63,73 @@ export default function Chat() {
     socket.current.off("call-accepted");
     socket.current.off("end-call");
 
-    /** 📥 Receiver gets a call */
-    socket.current.on("incoming-call", ({ from }) => {
-      setIncomingCall(from);
-      setCallRemoteUser(from);
+    // 📥 Receiver gets call popup
+    socket.current.on("incoming-call", (data) => {
+      setIncomingCall(data.from);
+      setCallRemoteUser(data.from);
     });
 
-    /** ❌ Caller notified call rejected */
+    // ❌ Caller notified call was rejected
     socket.current.on("call-rejected", () => {
       alert("❌ Call rejected");
       setIncomingCall(null);
       setOnCall(false);
-      setCallRemoteUser(null);
     });
 
-    /** ✔ Caller notified call accepted */
-    socket.current.on("call-accepted", ({ from }) => {
+    // ✔ Caller notified call accepted
+    socket.current.on("call-accepted", () => {
       setIncomingCall(null);
       setOnCall(true);
-      setCallRemoteUser(from);
     });
 
-    /** 🔴 Call ended by remote */
+    // 🔴 End call
     socket.current.on("end-call", () => {
-      alert("🔴 Call ended");
+      alert("🔴 Call Ended");
       setOnCall(false);
-      setCallRemoteUser(null);
     });
   }, [currentUser]);
 
   /** 📞 Accept call */
   const acceptCall = () => {
-    incomingCall.isCaller = false;   // 🔥 receiver role
-    setOnCall(true);
-    setCallRemoteUser(incomingCall);
-    socket.current.emit("call-accepted", { to: incomingCall._id, from: currentUser });
-    setIncomingCall(null);
-  };
+  let user = JSON.parse(localStorage.getItem(process.env.REACT_APP_LOCALHOST_KEY));
+  user.isCaller = false; // 🔥 Receiver must not be caller
+  localStorage.setItem(process.env.REACT_APP_LOCALHOST_KEY, JSON.stringify(user));
+  setCurrentUser(user);
+
+  socket.current.emit("call-accepted", {
+    to: incomingCall._id ?? incomingCall,
+  });
+  setIncomingCall(null);
+  setOnCall(true);
+};
+
 
   /** ❌ Reject call */
   const rejectCall = () => {
-    socket.current.emit("call-rejected", { to: incomingCall._id });
+    socket.current.emit("call-rejected", {
+      to: incomingCall._id ?? incomingCall,
+    });
     setIncomingCall(null);
   };
 
-  /** 🔴 End call manually */
+  /** 🔴 End call */
   const endAudioCall = () => {
     if (callRemoteUser) {
-      socket.current.emit("end-call", { to: callRemoteUser._id });
+      socket.current.emit("end-call", {
+        to: callRemoteUser._id ?? callRemoteUser,
+      });
     }
     setOnCall(false);
-    setCallRemoteUser(null);
   };
 
-  /** User selects chat */
+  /** Selecting a chat */
   const handleChatChange = (chat) => {
     setCurrentChat(chat);
   };
 
   return (
     <>
-      {/* 🔔 incoming call popup */}
+      {/* Popup for incoming call */}
       {incomingCall && (
         <IncomingCall
           caller={incomingCall}
@@ -130,7 +138,7 @@ export default function Chat() {
         />
       )}
 
-      {/* 🔊 audio call live screen */}
+      {/* Active call window */}
       {onCall && currentUser && callRemoteUser && (
         <AudioCall
           socket={socket}
@@ -147,11 +155,7 @@ export default function Chat() {
             <ChatContainer
               currentChat={currentChat}
               socket={socket}
-              setCallRemoteUser={(user) => {
-                user.isCaller = true;       // 🔥 caller role
-                setCallRemoteUser(user);
-                setOnCall(true);
-              }}
+              setCallRemoteUser={setCallRemoteUser}
             />
           ) : (
             <Welcome />
@@ -162,7 +166,6 @@ export default function Chat() {
   );
 }
 
-/* 🎨 UI */
 const Container = styled.div`
   height: 100vh;
   width: 100vw;
@@ -170,7 +173,6 @@ const Container = styled.div`
   justify-content: center;
   align-items: center;
   background-color: #131324;
-
   .inner {
     height: 85vh;
     width: 85vw;
