@@ -1,7 +1,7 @@
 // components/AudioCall.jsx
 import React, { useEffect, useRef, useState } from "react";
 import styled from "styled-components";
-import { IoCallSharp } from "react-icons/io5";
+import { IoCallSharp } from "react-icons/io5"; // ✔ Correct icon
 
 export default function AudioCall({ socket, currentUser, remoteUser, onEnd }) {
   const [timer, setTimer] = useState(0);
@@ -14,48 +14,50 @@ export default function AudioCall({ socket, currentUser, remoteUser, onEnd }) {
     startTimer();
     initCall();
 
-    return () => endCall(true);
+    return () => endCall(true); // Cleanup when component unmounts
   }, []);
 
-  /** ⏳ Call Duration */
+  /** ⏳ Start Call Timer */
   const startTimer = () => {
-    intervalRef.current = setInterval(() => setTimer(t => t + 1), 1000);
+    intervalRef.current = setInterval(() => {
+      setTimer((t) => t + 1);
+    }, 1000);
   };
 
-  /** 🎧 WebRTC Setup */
+  /** 🔊 WebRTC Audio Setup */
   const initCall = async () => {
-    const localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    localStreamRef.current = localStream;
+    const local = await navigator.mediaDevices.getUserMedia({ audio: true });
+    localStreamRef.current = local;
 
     const peer = new RTCPeerConnection({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
 
-    localStream.getTracks().forEach(track => peer.addTrack(track, localStream));
+    local.getTracks().forEach((track) => peer.addTrack(track, local));
 
-    peer.ontrack = (event) => {
-      audioRef.current.srcObject = event.streams[0];
+    peer.ontrack = (e) => {
+      audioRef.current.srcObject = e.streams[0];
     };
 
-    peer.onicecandidate = (event) => {
-      if (event.candidate) {
+    peer.onicecandidate = (e) => {
+      if (e.candidate) {
         socket.current.emit("ice-candidate", {
           to: remoteUser._id,
-          candidate: event.candidate,
+          candidate: e.candidate,
         });
       }
     };
 
     peerRef.current = peer;
 
-    /** 🎤 Caller sends offer */
+    // 🌍 If caller — send offer
     if (currentUser.isCaller) {
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
       socket.current.emit("send-offer", { to: remoteUser._id, offer });
     }
 
-    /** 🔁 Receiver handles offer → returns answer */
+    // 🔁 Receiver gets offer → sends answer
     socket.current.on("receive-offer", async ({ offer }) => {
       await peer.setRemoteDescription(offer);
       const answer = await peer.createAnswer();
@@ -63,30 +65,29 @@ export default function AudioCall({ socket, currentUser, remoteUser, onEnd }) {
       socket.current.emit("send-answer", { to: remoteUser._id, answer });
     });
 
-    /** 🔁 Caller receives answer */
+    // 🔁 Caller receives answer
     socket.current.on("receive-answer", async ({ answer }) => {
       await peer.setRemoteDescription(answer);
     });
 
-    /** ❄ ICE candidate exchange */
+    // ❄ ICE Candidates exchange
     socket.current.on("receive-ice-candidate", async ({ candidate }) => {
       if (candidate) await peer.addIceCandidate(candidate);
     });
 
-    /** 🔴 End call from remote */
+    // 🔴 End call event from remote user
+    //socket.current.off("end-call");
     socket.current.on("end-call", () => endCall());
+
   };
 
-  /** 🔴 End Call */
+  /** 🔴 End The Call */
   const endCall = (closing = false) => {
     clearInterval(intervalRef.current);
-
-    localStreamRef.current?.getTracks().forEach(t => t.stop());
+    localStreamRef.current?.getTracks().forEach((t) => t.stop());
     peerRef.current?.close();
 
-    if (!closing) {
-      socket.current.emit("end-call", { to: remoteUser._id });
-    }
+    if (!closing) socket.current.emit("end-call", { to: remoteUser._id });
 
     onEnd();
   };
@@ -105,7 +106,7 @@ export default function AudioCall({ socket, currentUser, remoteUser, onEnd }) {
         <audio ref={audioRef} autoPlay></audio>
 
         <button className="end" onClick={endCall}>
-          <IoCallSharp style={{ transform: "rotate(135deg)", marginRight: 8 }} />
+          <IoCallSharp style={{ transform: "rotate(135deg)", marginRight: "8px" }} />
           End Call
         </button>
       </CallBox>
