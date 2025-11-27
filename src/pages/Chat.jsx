@@ -42,11 +42,7 @@ export default function Chat() {
   useEffect(() => {
     const fetchContacts = async () => {
       if (!currentUser) return;
-
-      if (!currentUser.isAvatarImageSet) {
-        navigate("/setAvatar");
-        return;
-      }
+      if (!currentUser.isAvatarImageSet) return navigate("/setAvatar");
 
       const { data } = await axios.get(`${allUsersRoute}/${currentUser._id}`);
       setContacts(data);
@@ -63,26 +59,22 @@ export default function Chat() {
     socket.current.off("call-accepted");
     socket.current.off("end-call");
 
-    // Receiver sees popup
     socket.current.on("incoming-call", (data) => {
       setIncomingCall(data.from);
       setCallRemoteUser(data.from);
     });
 
-    // Caller → call accepted
-    socket.current.on("call-accepted", () => {
-      setIncomingCall(null);
-      setOnCall(true);
-    });
-
-    // Caller → call rejected
     socket.current.on("call-rejected", () => {
       alert("❌ Call rejected");
       setIncomingCall(null);
       setOnCall(false);
     });
 
-    // End call for both
+    socket.current.on("call-accepted", () => {
+      setIncomingCall(null);
+      setOnCall(true);
+    });
+
     socket.current.on("end-call", () => {
       alert("🔴 Call Ended");
       setOnCall(false);
@@ -92,41 +84,41 @@ export default function Chat() {
   /** 📞 Accept call */
   const acceptCall = () => {
     let user = JSON.parse(localStorage.getItem(process.env.REACT_APP_LOCALHOST_KEY));
-    user.isCaller = false;                     // Receiver must be false
+    user.isCaller = false;
     localStorage.setItem(process.env.REACT_APP_LOCALHOST_KEY, JSON.stringify(user));
     setCurrentUser(user);
 
-    socket.current.emit("call-accepted", {
-      to: incomingCall._id ?? incomingCall,
-    });
+    socket.current.emit("call-accepted", { to: incomingCall._id ?? incomingCall });
     setIncomingCall(null);
     setOnCall(true);
   };
 
-  /** ❌ Reject */
+  /** ❌ Reject call */
   const rejectCall = () => {
-    socket.current.emit("call-rejected", {
-      to: incomingCall._id ?? incomingCall,
-    });
+    socket.current.emit("call-rejected", { to: incomingCall._id ?? incomingCall });
     setIncomingCall(null);
   };
 
-  /** 🔴 End call */
+  /** 🔴 End call (from UI) */
   const endAudioCall = () => {
     if (callRemoteUser) {
-      socket.current.emit("end-call", {
-        to: callRemoteUser._id ?? callRemoteUser,
-      });
+      socket.current.emit("end-call", { to: callRemoteUser._id ?? callRemoteUser });
     }
     setOnCall(false);
   };
 
-  const handleChatChange = (chat) => setCurrentChat(chat);
+  const handleChatChange = (chat) => {
+    setCurrentChat(chat);
+  };
 
   return (
     <>
       {incomingCall && (
-        <IncomingCall caller={incomingCall} onAccept={acceptCall} onReject={rejectCall} />
+        <IncomingCall
+          caller={incomingCall}
+          onAccept={acceptCall}
+          onReject={rejectCall}
+        />
       )}
 
       {onCall && currentUser && callRemoteUser && (

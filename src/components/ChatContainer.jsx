@@ -16,7 +16,6 @@ import {
 export default function ChatContainer({ currentChat, socket, setCallRemoteUser }) {
   const [messages, setMessages] = useState([]);
   const [arrivalMessage, setArrivalMessage] = useState(null);
-
   const scrollRef = useRef();
   const [menuMessageId, setMenuMessageId] = useState(null);
   const [menuPos, setMenuPos] = useState({ x: 0, y: 0 });
@@ -33,18 +32,19 @@ export default function ChatContainer({ currentChat, socket, setCallRemoteUser }
     fetchMessages();
   }, [currentChat]);
 
-  /** 📞 CALL BUTTON — includes caller flag */
+  /** 📞 CALL BUTTON — mark user as caller */
   const startCall = () => {
-    const data = JSON.parse(localStorage.getItem(process.env.REACT_APP_LOCALHOST_KEY));
+    let user = JSON.parse(localStorage.getItem(process.env.REACT_APP_LOCALHOST_KEY));
+    user.isCaller = true;
+    localStorage.setItem(process.env.REACT_APP_LOCALHOST_KEY, JSON.stringify(user));
 
-    data.isCaller = true; // 🔥 IMPORTANT — identifies offer creator
-    setCallRemoteUser(currentChat); // pass remote user to Chat.jsx
+    setCallRemoteUser(currentChat);
+    socket.current.emit("call-user", { from: user, to: currentChat._id });
 
-    socket.current.emit("call-user", { from: data, to: currentChat._id });
     alert("Calling...");
   };
 
-  /** ✉ SEND TEXT */
+  /** ✉ TEXT MESSAGE */
   const handleSendMsg = async (msg) => {
     const data = JSON.parse(localStorage.getItem(process.env.REACT_APP_LOCALHOST_KEY));
     const res = await axios.post(sendMessageRoute, {
@@ -58,13 +58,7 @@ export default function ChatContainer({ currentChat, socket, setCallRemoteUser }
 
     setMessages((prev) => [
       ...prev,
-      {
-        _id: res.data.id,
-        fromSelf: true,
-        message: msg,
-        type: "text",
-        isDeleted: false,
-      },
+      { _id: res.data.id, fromSelf: true, message: msg, type: "text", isDeleted: false },
     ]);
   };
 
@@ -97,17 +91,12 @@ export default function ChatContainer({ currentChat, socket, setCallRemoteUser }
     ]);
   };
 
-  /** 🔔 RECEIVE MESSAGES */
+  /** 🔔 RECEIVE */
   useEffect(() => {
     if (!socket.current) return;
 
     socket.current.on("msg-recieve", (msg) =>
-      setArrivalMessage({
-        fromSelf: false,
-        message: msg,
-        type: "text",
-        isDeleted: false,
-      })
+      setArrivalMessage({ fromSelf: false, message: msg, type: "text", isDeleted: false })
     );
 
     socket.current.on("file-recieve", (data) =>
@@ -129,7 +118,7 @@ export default function ChatContainer({ currentChat, socket, setCallRemoteUser }
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  /** ⚙ RIGHT CLICK MENU */
+  /** ⚙ POPUP MENU */
   const openMenu = (e, id) => {
     e.preventDefault();
     setMenuMessageId(id);
@@ -146,7 +135,6 @@ export default function ChatContainer({ currentChat, socket, setCallRemoteUser }
 
   const deleteForEveryone = async (id) => {
     await axios.post(deleteForEveryoneRoute, { messageId: id });
-
     setMessages((prev) =>
       prev.map((msg) =>
         msg._id === id
@@ -244,8 +232,7 @@ export default function ChatContainer({ currentChat, socket, setCallRemoteUser }
   );
 }
 
-/* ───────────────────────── STYLES ───────────────────────── */
-
+/* ─────────────── STYLES ─────────────── */
 const MenuContainer = styled.div`
   position: fixed;
   top: ${(props) => props.y}px;
@@ -273,101 +260,17 @@ const Container = styled.div`
     justify-content: space-between;
     align-items: center;
     padding: 0 2rem;
-
-    .user-details {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-    }
-
-    .username h3 {
-      font-size: 1.25rem;
-      color: #ffffff;
-      font-weight: 600;
-    }
-
-    .avatar img {
-      height: 3rem;
-      border-radius: 50%;
-    }
   }
 
   .actions {
     display: flex;
     align-items: center;
     gap: 1.2rem;
-
-    .call-btn {
-      font-size: 1.9rem;
-      color: #4caf50;
-      cursor: pointer;
-    }
   }
 
-  .chat-messages {
-    padding: 1rem 2.4rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    overflow-y: auto;
-  }
-
-  .message {
-    display: flex;
-  }
-
-  .recieved {
-    justify-content: flex-start;
-  }
-  .recieved .content {
-    background: #2d2d45;
-    color: #fff;
-    padding: 12px 16px;
-    border-radius: 18px 18px 18px 6px;
-    max-width: 55%;
-  }
-
-  .sended {
-    justify-content: flex-end;
-  }
-  .sended .content {
-    background: #7c3aed;
-    color: white;
-    padding: 12px 16px;
-    border-radius: 18px 18px 6px 18px;
-    max-width: 55%;
-  }
-
-  .deleted {
-    opacity: 0.55;
-    font-style: italic;
-  }
-
-  img,
-  video {
-    max-width: 240px;
-    border-radius: 12px;
-    margin-top: 6px;
-  }
-
-  .zoomable-image {
-    cursor: zoom-in;
-  }
-
-  .download-btn {
-    background: linear-gradient(135deg, #0095ff, #05d7ff);
-    padding: 6px 13px;
-    border-radius: 12px;
-    font-weight: 600;
-    color: white;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
-    transition: 0.2s;
-  }
-  .download-btn:hover {
-    transform: translateY(-2px);
-    background: linear-gradient(135deg, #0079d7, #02bad7);
+  .call-btn {
+    font-size: 1.9rem;
+    color: #4caf50;
+    cursor: pointer;
   }
 `;
