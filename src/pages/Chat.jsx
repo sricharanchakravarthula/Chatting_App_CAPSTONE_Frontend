@@ -176,6 +176,6 @@ const Container = styled.div`
     width: 85vw;
     background-color: #00000076;
     display: grid;
-    grid-template-columns: 24% 75%;
+    grid-template-columns: 25% 75%;
   }
 `;
