@@ -1,53 +1,36 @@
 // components/AudioCall.jsx
 import React, { useEffect, useRef, useState } from "react";
 import styled from "styled-components";
-import { IoCallSharp } from "react-icons/io5";
+import { IoCallSharp } from "react-icons/io5"; // ✔ Correct icon
 
 export default function AudioCall({ socket, currentUser, remoteUser, onEnd }) {
   const [timer, setTimer] = useState(0);
-  const audioRef = useRef(null);
-  const peerRef = useRef(null);
-  const localStreamRef = useRef(null);
-  const intervalRef = useRef(null);
+  const audioRef = useRef();
+  const peerRef = useRef();
+  const localStreamRef = useRef();
+  const intervalRef = useRef();
 
   useEffect(() => {
     startTimer();
     initCall();
 
-    return () => endCall(true); // Cleanup on unmount
+    return () => endCall(true); // Cleanup when component unmounts
   }, []);
 
-  /** ⏳ Start call timer */
+  /** ⏳ Start Call Timer */
   const startTimer = () => {
     intervalRef.current = setInterval(() => {
       setTimer((t) => t + 1);
     }, 1000);
   };
 
-  /** 🔊 Initialize WebRTC Call */
+  /** 🔊 WebRTC Audio Setup */
   const initCall = async () => {
     const local = await navigator.mediaDevices.getUserMedia({ audio: true });
     localStreamRef.current = local;
 
     const peer = new RTCPeerConnection({
-      iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        {
-          urls: "turn:openrelay.metered.ca:80",
-          username: "openrelayproject",
-          credential: "openrelayproject",
-        },
-        {
-          urls: "turn:openrelay.metered.ca:443",
-          username: "openrelayproject",
-          credential: "openrelayproject",
-        },
-        {
-          urls: "turn:openrelay.metered.ca:443?transport=tcp",
-          username: "openrelayproject",
-          credential: "openrelayproject",
-        },
-      ],
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
 
     local.getTracks().forEach((track) => peer.addTrack(track, local));
@@ -67,15 +50,14 @@ export default function AudioCall({ socket, currentUser, remoteUser, onEnd }) {
 
     peerRef.current = peer;
 
-    // OFFER sender
+    // 🌍 If caller — send offer
     if (currentUser.isCaller) {
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
       socket.current.emit("send-offer", { to: remoteUser._id, offer });
     }
 
-    // OFFER receiver
-    socket.current.off("receive-offer");
+    // 🔁 Receiver gets offer → sends answer
     socket.current.on("receive-offer", async ({ offer }) => {
       await peer.setRemoteDescription(offer);
       const answer = await peer.createAnswer();
@@ -83,35 +65,31 @@ export default function AudioCall({ socket, currentUser, remoteUser, onEnd }) {
       socket.current.emit("send-answer", { to: remoteUser._id, answer });
     });
 
-    // ANSWER receiver
-    socket.current.off("receive-answer");
+    // 🔁 Caller receives answer
     socket.current.on("receive-answer", async ({ answer }) => {
       await peer.setRemoteDescription(answer);
     });
 
-    // ICE receiver
-    socket.current.off("receive-ice-candidate");
+    // ❄ ICE Candidates exchange
     socket.current.on("receive-ice-candidate", async ({ candidate }) => {
       if (candidate) await peer.addIceCandidate(candidate);
     });
 
-    // END call receiver
-    socket.current.off("end-call");
+    // 🔴 End call event from remote user
+    //socket.current.off("end-call");
     socket.current.on("end-call", () => endCall());
+
   };
 
-  /** 🔴 End Call */
+  /** 🔴 End The Call */
   const endCall = (closing = false) => {
     clearInterval(intervalRef.current);
-
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     peerRef.current?.close();
 
-    if (!closing) {
-      socket.current.emit("end-call", { to: remoteUser._id });
-    }
+    if (!closing) socket.current.emit("end-call", { to: remoteUser._id });
 
-    onEnd(); // Notify Chat.jsx
+    onEnd();
   };
 
   return (
