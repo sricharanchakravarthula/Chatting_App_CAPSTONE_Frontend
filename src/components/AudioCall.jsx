@@ -17,12 +17,12 @@ export default function AudioCall({ socket, currentUser, remoteUser, onEnd }) {
     // eslint-disable-next-line
   }, []);
 
-  /** ⏱ Timer */
+  /** 🕒 Call Timer */
   const startTimer = () => {
     intervalRef.current = setInterval(() => setTimer((t) => t + 1), 1000);
   };
 
-  /** 🎧 WebRTC Setup */
+  /** 🎤 WebRTC */
   const initCall = async () => {
     const localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     localStreamRef.current = localStream;
@@ -34,31 +34,21 @@ export default function AudioCall({ socket, currentUser, remoteUser, onEnd }) {
           urls: "turn:openrelay.metered.ca:80",
           username: "openrelayproject",
           credential: "openrelayproject",
-        },
-        {
-          urls: "turn:openrelay.metered.ca:443",
-          username: "openrelayproject",
-          credential: "openrelayproject",
-        },
-        {
-          urls: "turn:openrelay.metered.ca:443?transport=tcp",
-          username: "openrelayproject",
-          credential: "openrelayproject",
-        },
+        }
       ],
     });
 
     peerRef.current = peer;
 
-    // Send our mic stream
+    // Add microphone to call
     localStream.getTracks().forEach((track) => peer.addTrack(track, localStream));
 
-    // Play remote audio when received
+    // Play remote audio
     peer.ontrack = (event) => {
       audioRef.current.srcObject = event.streams[0];
     };
 
-    // Send ICE candidates to other peer
+    // ICE exchange
     peer.onicecandidate = (event) => {
       if (event.candidate) {
         socket.current.emit("ice-candidate", {
@@ -68,14 +58,15 @@ export default function AudioCall({ socket, currentUser, remoteUser, onEnd }) {
       }
     };
 
-    /** CALLER → send offer */
+    /** CALLER: send offer */
     if (currentUser.isCaller) {
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
       socket.current.emit("send-offer", { to: remoteUser._id, offer });
     }
 
-    /** RECEIVER → get offer → send answer */
+    /** RECEIVER: receive offer → send answer */
+    socket.current.off("receive-offer");
     socket.current.on("receive-offer", async ({ offer }) => {
       if (currentUser.isCaller) return;
       await peer.setRemoteDescription(offer);
@@ -84,31 +75,36 @@ export default function AudioCall({ socket, currentUser, remoteUser, onEnd }) {
       socket.current.emit("send-answer", { to: remoteUser._id, answer });
     });
 
-    /** CALLER → get answer */
+    /** CALLER: receive answer */
+    socket.current.off("receive-answer");
     socket.current.on("receive-answer", async ({ answer }) => {
       if (!currentUser.isCaller) return;
       await peer.setRemoteDescription(answer);
     });
 
-    /** ICE candidates exchange */
+    /** ICE candidate exchange */
+    socket.current.off("receive-ice-candidate");
     socket.current.on("receive-ice-candidate", async ({ candidate }) => {
       if (candidate) await peer.addIceCandidate(candidate);
     });
 
     /** End call */
+    socket.current.off("end-call");
     socket.current.on("end-call", () => endCall());
   };
 
   /** 🔴 End Call */
   const endCall = (closing = false) => {
     clearInterval(intervalRef.current);
-
-    localStreamRef.current?.getTracks().forEach((track) => track.stop());
+    localStreamRef.current?.getTracks().forEach(track => track.stop());
     peerRef.current?.close();
 
     if (!closing) {
       socket.current.emit("end-call", { to: remoteUser._id });
     }
+
+    // Reset caller flag for safety
+    currentUser.isCaller = false;
 
     onEnd();
   };
@@ -135,7 +131,7 @@ export default function AudioCall({ socket, currentUser, remoteUser, onEnd }) {
   );
 }
 
-/* 🎨 Styling */
+/* 🔥 UI */
 const Overlay = styled.div`
   position: fixed;
   inset: 0;
@@ -156,15 +152,8 @@ const CallBox = styled.div`
   text-align: center;
   color: white;
   box-shadow: 0 0 22px rgba(120, 98, 255, 0.26);
-
-  .user {
-    font-size: 1.25rem;
-    opacity: 0.92;
-  }
-  .timer {
-    margin-top: 10px;
-    font-size: 1.45rem;
-  }
+  .user { font-size: 1.25rem; opacity: 0.92; }
+  .timer { margin-top: 10px; font-size: 1.45rem; }
   .end {
     margin-top: 26px;
     width: 100%;
@@ -179,7 +168,5 @@ const CallBox = styled.div`
     justify-content: center;
     align-items: center;
   }
-  .end:hover {
-    background: #ff466d;
-  }
+  .end:hover { background: #ff466d; }
 `;

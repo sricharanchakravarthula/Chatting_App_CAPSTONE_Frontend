@@ -36,6 +36,8 @@ export default function ChatContainer({ currentChat, socket, setCallRemoteUser }
   /** 📞 Start Call */
   const startCall = () => {
     let user = JSON.parse(localStorage.getItem(process.env.REACT_APP_LOCALHOST_KEY));
+
+    // 🔥 Mark caller only for this call
     user.isCaller = true;
     localStorage.setItem(process.env.REACT_APP_LOCALHOST_KEY, JSON.stringify(user));
 
@@ -44,7 +46,7 @@ export default function ChatContainer({ currentChat, socket, setCallRemoteUser }
     alert("Calling...");
   };
 
-  /** ✉ SEND TEXT */
+  /** SEND TEXT */
   const handleSendMsg = async (msg) => {
     const data = JSON.parse(localStorage.getItem(process.env.REACT_APP_LOCALHOST_KEY));
     const res = await axios.post(sendMessageRoute, {
@@ -68,7 +70,7 @@ export default function ChatContainer({ currentChat, socket, setCallRemoteUser }
     ]);
   };
 
-  /** 📎 FILE SEND */
+  /** SEND FILE */
   const handleSendFile = async (file) => {
     const data = JSON.parse(localStorage.getItem(process.env.REACT_APP_LOCALHOST_KEY));
     const formData = new FormData();
@@ -97,7 +99,7 @@ export default function ChatContainer({ currentChat, socket, setCallRemoteUser }
     ]);
   };
 
-  /** 🔔 RECEIVE */
+  /** RECEIVE MSGS */
   useEffect(() => {
     if (!socket.current) return;
 
@@ -129,7 +131,7 @@ export default function ChatContainer({ currentChat, socket, setCallRemoteUser }
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  /** 🔥 MENU */
+  /** MENU */
   const openMenu = (e, id) => {
     e.preventDefault();
     setMenuMessageId(id);
@@ -197,25 +199,24 @@ export default function ChatContainer({ currentChat, socket, setCallRemoteUser }
                   message.type === "text" && <p>{message.message}</p>
                 )}
 
-                {!message.isDeleted && message.type ===
-                  "file" && (
-                    <>
-                      {message.fileType?.startsWith("image") && (
-                        <a href={message.fileUrl} target="_blank" rel="noopener noreferrer">
-                          <img src={message.fileUrl} alt="file" className="zoomable-image" />
+                {!message.isDeleted && message.type === "file" && (
+                  <>
+                    {message.fileType?.startsWith("image") && (
+                      <a href={message.fileUrl} target="_blank" rel="noopener noreferrer">
+                        <img src={message.fileUrl} alt="file" className="zoomable-image" />
+                      </a>
+                    )}
+                    {message.fileType?.startsWith("video") && (
+                      <video src={message.fileUrl} controls />
+                    )}
+                    {!message.fileType?.startsWith("image") &&
+                      !message.fileType?.startsWith("video") && (
+                        <a href={message.fileUrl} target="_blank" rel="noopener noreferrer" className="download-btn">
+                          📎 Download File
                         </a>
                       )}
-                      {message.fileType?.startsWith("video") && (
-                        <video src={message.fileUrl} controls />
-                      )}
-                      {!message.fileType?.startsWith("image") &&
-                        !message.fileType?.startsWith("video") && (
-                          <a href={message.fileUrl} target="_blank" rel="noopener noreferrer" className="download-btn">
-                            📎 Download File
-                          </a>
-                        )}
-                    </>
-                  )}
+                  </>
+                )}
               </div>
 
               {menuMessageId === message._id && (
@@ -244,3 +245,51 @@ export default function ChatContainer({ currentChat, socket, setCallRemoteUser }
     </Container>
   );
 }
+
+/* STYLES */
+const MenuContainer = styled.div`
+  position: fixed;
+  top: ${(props) => props.y}px;
+  left: ${(props) => props.x}px;
+  background: #24243b;
+  color: white;
+  padding: 0.55rem;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  cursor: pointer;
+  z-index: 9999;
+`;
+
+const Container = styled.div`
+  display: grid;
+  grid-template-rows: 10% 80% 10%;
+  overflow: hidden;
+
+  .chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 2rem;
+  }
+
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: 1.2rem;
+    .call-btn {
+      font-size: 1.9rem;
+      color: #4caf50;
+      cursor: pointer;
+    }
+  }
+
+  .chat-messages {
+    padding: 1rem 2.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    overflow-y: auto;
+  }
+`;
