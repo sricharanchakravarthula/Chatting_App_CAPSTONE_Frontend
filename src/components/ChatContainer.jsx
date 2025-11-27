@@ -1,4 +1,3 @@
-// ChatContainer.jsx
 import React, { useState, useEffect, useRef } from "react";
 import styled from "styled-components";
 import ChatInput from "./ChatInput";
@@ -17,6 +16,7 @@ import {
 export default function ChatContainer({ currentChat, socket, setCallRemoteUser }) {
   const [messages, setMessages] = useState([]);
   const [arrivalMessage, setArrivalMessage] = useState(null);
+
   const scrollRef = useRef();
   const [menuMessageId, setMenuMessageId] = useState(null);
   const [menuPos, setMenuPos] = useState({ x: 0, y: 0 });
@@ -33,20 +33,18 @@ export default function ChatContainer({ currentChat, socket, setCallRemoteUser }
     fetchMessages();
   }, [currentChat]);
 
-  /** 📞 Start Call */
+  /** 📞 CALL BUTTON — includes caller flag */
   const startCall = () => {
-    let user = JSON.parse(localStorage.getItem(process.env.REACT_APP_LOCALHOST_KEY));
+    const data = JSON.parse(localStorage.getItem(process.env.REACT_APP_LOCALHOST_KEY));
 
-    // 🔥 Mark caller only for this call
-    user.isCaller = true;
-    localStorage.setItem(process.env.REACT_APP_LOCALHOST_KEY, JSON.stringify(user));
+    data.isCaller = true; // 🔥 IMPORTANT — identifies offer creator
+    setCallRemoteUser(currentChat); // pass remote user to Chat.jsx
 
-    setCallRemoteUser(currentChat);
-    socket.current.emit("call-user", { from: user, to: currentChat._id });
+    socket.current.emit("call-user", { from: data, to: currentChat._id });
     alert("Calling...");
   };
 
-  /** SEND TEXT */
+  /** ✉ SEND TEXT */
   const handleSendMsg = async (msg) => {
     const data = JSON.parse(localStorage.getItem(process.env.REACT_APP_LOCALHOST_KEY));
     const res = await axios.post(sendMessageRoute, {
@@ -70,7 +68,7 @@ export default function ChatContainer({ currentChat, socket, setCallRemoteUser }
     ]);
   };
 
-  /** SEND FILE */
+  /** 📎 SEND FILE */
   const handleSendFile = async (file) => {
     const data = JSON.parse(localStorage.getItem(process.env.REACT_APP_LOCALHOST_KEY));
     const formData = new FormData();
@@ -99,7 +97,7 @@ export default function ChatContainer({ currentChat, socket, setCallRemoteUser }
     ]);
   };
 
-  /** RECEIVE MSGS */
+  /** 🔔 RECEIVE MESSAGES */
   useEffect(() => {
     if (!socket.current) return;
 
@@ -131,7 +129,7 @@ export default function ChatContainer({ currentChat, socket, setCallRemoteUser }
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  /** MENU */
+  /** ⚙ RIGHT CLICK MENU */
   const openMenu = (e, id) => {
     e.preventDefault();
     setMenuMessageId(id);
@@ -148,6 +146,7 @@ export default function ChatContainer({ currentChat, socket, setCallRemoteUser }
 
   const deleteForEveryone = async (id) => {
     await axios.post(deleteForEveryoneRoute, { messageId: id });
+
     setMessages((prev) =>
       prev.map((msg) =>
         msg._id === id
@@ -206,9 +205,7 @@ export default function ChatContainer({ currentChat, socket, setCallRemoteUser }
                         <img src={message.fileUrl} alt="file" className="zoomable-image" />
                       </a>
                     )}
-                    {message.fileType?.startsWith("video") && (
-                      <video src={message.fileUrl} controls />
-                    )}
+                    {message.fileType?.startsWith("video") && <video src={message.fileUrl} controls />}
                     {!message.fileType?.startsWith("image") &&
                       !message.fileType?.startsWith("video") && (
                         <a href={message.fileUrl} target="_blank" rel="noopener noreferrer" className="download-btn">
@@ -229,6 +226,7 @@ export default function ChatContainer({ currentChat, socket, setCallRemoteUser }
                         <p onClick={() => downloadImage(message.fileUrl)}>Save Image</p>
                       </>
                     )}
+
                   <p onClick={() => deleteForMe(message._id)}>Delete for Me</p>
                   {message.fromSelf && !message.isDeleted && (
                     <p onClick={() => deleteForEveryone(message._id)}>Delete for Everyone</p>
@@ -246,7 +244,8 @@ export default function ChatContainer({ currentChat, socket, setCallRemoteUser }
   );
 }
 
-/* STYLES */
+/* ───────────────────────── STYLES ───────────────────────── */
+
 const MenuContainer = styled.div`
   position: fixed;
   top: ${(props) => props.y}px;
@@ -257,9 +256,11 @@ const MenuContainer = styled.div`
   border-radius: 8px;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.45rem;
+  font-size: 0.9rem;
   cursor: pointer;
   z-index: 9999;
+  min-width: 180px;
 `;
 
 const Container = styled.div`
@@ -272,12 +273,30 @@ const Container = styled.div`
     justify-content: space-between;
     align-items: center;
     padding: 0 2rem;
+
+    .user-details {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .username h3 {
+      font-size: 1.25rem;
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    .avatar img {
+      height: 3rem;
+      border-radius: 50%;
+    }
   }
 
   .actions {
     display: flex;
     align-items: center;
     gap: 1.2rem;
+
     .call-btn {
       font-size: 1.9rem;
       color: #4caf50;
@@ -291,5 +310,64 @@ const Container = styled.div`
     flex-direction: column;
     gap: 1rem;
     overflow-y: auto;
+  }
+
+  .message {
+    display: flex;
+  }
+
+  .recieved {
+    justify-content: flex-start;
+  }
+  .recieved .content {
+    background: #2d2d45;
+    color: #fff;
+    padding: 12px 16px;
+    border-radius: 18px 18px 18px 6px;
+    max-width: 55%;
+  }
+
+  .sended {
+    justify-content: flex-end;
+  }
+  .sended .content {
+    background: #7c3aed;
+    color: white;
+    padding: 12px 16px;
+    border-radius: 18px 18px 6px 18px;
+    max-width: 55%;
+  }
+
+  .deleted {
+    opacity: 0.55;
+    font-style: italic;
+  }
+
+  img,
+  video {
+    max-width: 240px;
+    border-radius: 12px;
+    margin-top: 6px;
+  }
+
+  .zoomable-image {
+    cursor: zoom-in;
+  }
+
+  .download-btn {
+    background: linear-gradient(135deg, #0095ff, #05d7ff);
+    padding: 6px 13px;
+    border-radius: 12px;
+    font-weight: 600;
+    color: white;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+    transition: 0.2s;
+  }
+  .download-btn:hover {
+    transform: translateY(-2px);
+    background: linear-gradient(135deg, #0079d7, #02bad7);
   }
 `;

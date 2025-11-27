@@ -14,15 +14,14 @@ export default function AudioCall({ socket, currentUser, remoteUser, onEnd }) {
     startTimer();
     initCall();
     return () => endCall(true);
-    // eslint-disable-next-line
   }, []);
 
-  /** 🕒 Call Timer */
+  /** ⏳ Start timer */
   const startTimer = () => {
-    intervalRef.current = setInterval(() => setTimer((t) => t + 1), 1000);
+    intervalRef.current = setInterval(() => setTimer(t => t + 1), 1000);
   };
 
-  /** 🎤 WebRTC */
+  /** 🔊 WebRTC Setup */
   const initCall = async () => {
     const localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     localStreamRef.current = localStream;
@@ -33,22 +32,29 @@ export default function AudioCall({ socket, currentUser, remoteUser, onEnd }) {
         {
           urls: "turn:openrelay.metered.ca:80",
           username: "openrelayproject",
-          credential: "openrelayproject",
+          credential: "openrelayproject"
+        },
+        {
+          urls: "turn:openrelay.metered.ca:443",
+          username: "openrelayproject",
+          credential: "openrelayproject"
+        },
+        {
+          urls: "turn:openrelay.metered.ca:443?transport=tcp",
+          username: "openrelayproject",
+          credential: "openrelayproject"
         }
       ],
     });
 
     peerRef.current = peer;
 
-    // Add microphone to call
-    localStream.getTracks().forEach((track) => peer.addTrack(track, localStream));
+    localStream.getTracks().forEach(track => peer.addTrack(track, localStream));
 
-    // Play remote audio
     peer.ontrack = (event) => {
       audioRef.current.srcObject = event.streams[0];
     };
 
-    // ICE exchange
     peer.onicecandidate = (event) => {
       if (event.candidate) {
         socket.current.emit("ice-candidate", {
@@ -58,15 +64,14 @@ export default function AudioCall({ socket, currentUser, remoteUser, onEnd }) {
       }
     };
 
-    /** CALLER: send offer */
+    /** Caller creates offer */
     if (currentUser.isCaller) {
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
       socket.current.emit("send-offer", { to: remoteUser._id, offer });
     }
 
-    /** RECEIVER: receive offer → send answer */
-    socket.current.off("receive-offer");
+    /** Receiver receives offer */
     socket.current.on("receive-offer", async ({ offer }) => {
       if (currentUser.isCaller) return;
       await peer.setRemoteDescription(offer);
@@ -75,36 +80,31 @@ export default function AudioCall({ socket, currentUser, remoteUser, onEnd }) {
       socket.current.emit("send-answer", { to: remoteUser._id, answer });
     });
 
-    /** CALLER: receive answer */
-    socket.current.off("receive-answer");
+    /** Caller receives answer */
     socket.current.on("receive-answer", async ({ answer }) => {
       if (!currentUser.isCaller) return;
       await peer.setRemoteDescription(answer);
     });
 
-    /** ICE candidate exchange */
-    socket.current.off("receive-ice-candidate");
+    /** Exchange ICE candidates */
     socket.current.on("receive-ice-candidate", async ({ candidate }) => {
       if (candidate) await peer.addIceCandidate(candidate);
     });
 
-    /** End call */
-    socket.current.off("end-call");
+    /** Remote ended call */
     socket.current.on("end-call", () => endCall());
   };
 
-  /** 🔴 End Call */
+  /** 🔴 End call */
   const endCall = (closing = false) => {
     clearInterval(intervalRef.current);
+
     localStreamRef.current?.getTracks().forEach(track => track.stop());
     peerRef.current?.close();
 
     if (!closing) {
       socket.current.emit("end-call", { to: remoteUser._id });
     }
-
-    // Reset caller flag for safety
-    currentUser.isCaller = false;
 
     onEnd();
   };
@@ -123,7 +123,7 @@ export default function AudioCall({ socket, currentUser, remoteUser, onEnd }) {
         <audio ref={audioRef} autoPlay></audio>
 
         <button className="end" onClick={endCall}>
-          <IoCallSharp style={{ transform: "rotate(135deg)", marginRight: 8 }} />
+          <IoCallSharp style={{ transform: "rotate(135deg)", marginRight: "8px" }} />
           End Call
         </button>
       </CallBox>
@@ -131,7 +131,7 @@ export default function AudioCall({ socket, currentUser, remoteUser, onEnd }) {
   );
 }
 
-/* 🔥 UI */
+/* 💄 UI Styling */
 const Overlay = styled.div`
   position: fixed;
   inset: 0;
@@ -152,8 +152,19 @@ const CallBox = styled.div`
   text-align: center;
   color: white;
   box-shadow: 0 0 22px rgba(120, 98, 255, 0.26);
-  .user { font-size: 1.25rem; opacity: 0.92; }
-  .timer { margin-top: 10px; font-size: 1.45rem; }
+
+  h2 {
+    margin-bottom: 4px;
+  }
+  .user {
+    font-size: 1.25rem;
+    opacity: 0.92;
+  }
+  .timer {
+    margin-top: 10px;
+    font-size: 1.45rem;
+    letter-spacing: 1px;
+  }
   .end {
     margin-top: 26px;
     width: 100%;
@@ -168,5 +179,7 @@ const CallBox = styled.div`
     justify-content: center;
     align-items: center;
   }
-  .end:hover { background: #ff466d; }
+  .end:hover {
+    background: #ff466d;
+  }
 `;
